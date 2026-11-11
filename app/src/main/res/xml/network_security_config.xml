@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    仅放行内网地址的明文 HTTP；HTTPS（nas.lifang.asia）使用系统信任的正规证书，
+    不做任何绕过校验的处理。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.31.15</domain>
+    </domain-config>
+</network-security-config>
