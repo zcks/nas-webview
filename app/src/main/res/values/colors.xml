@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#2563EB</color>
+    <color name="primary_dark">#1D4ED8</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="accent">#60A5FA</color>
+
+    <color name="window_bg">#F6F7F9</color>
+    <color name="top_bar_bg">#FFFFFF</color>
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="chip_stroke">#D1D5DB</color>
+    <color name="icon_tint">#4B5563</color>
+
+    <color name="launcher_bg">#0F172A</color>
+</resources>
