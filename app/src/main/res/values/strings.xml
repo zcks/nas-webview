@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NAS WebView</string>
+    <string name="lan">内网</string>
+    <string name="wan">外网</string>
+    <string name="auto">自动</string>
+    <string name="refresh">刷新</string>
+    <string name="menu">菜单</string>
+
+    <string name="error_title">页面加载失败</string>
+    <string name="retry">重试</string>
+    <string name="switch_url">切换地址</string>
+    <string name="switch_to_wan">切换到外网</string>
+    <string name="switch_to_lan">切换到内网</string>
+    <string name="detecting">正在检测网络…</string>
+    <string name="exit_hint">再按一次退出</string>
+
+    <string name="about_message">NAS WebView\n版本 %1$s\n\n内网地址：%2$s\n外网地址：%3$s\n\n一个用于手机访问 NAS Web 界面的轻量 WebView 客户端。</string>
+</resources>
