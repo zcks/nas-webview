@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val DEFAULT_URL_LAN = "http://192.168.31.15:8758"
-        const val DEFAULT_URL_WAN = "https://nas.lifang.asia:8758"
+        const val DEFAULT_URL_WAN = "http://nas.lifang.asia:8758"
 
         private const val PREFS_NAME = "nas_webview_prefs"
         private const val KEY_URL_LAN = "url_lan"
