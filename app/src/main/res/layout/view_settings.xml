@@ -274,7 +274,7 @@
                 android:id="@+id/aboutVersion"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="NAS WebView v1.2.0"
+                android:text="NAS Agent v1.3.0"
                 android:textColor="@color/text_primary"
                 android:textSize="16sp" />
 
@@ -282,7 +282,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="轻量 NAS Web 客户端 · 本地签名"
+                android:text="NAS Agent 移动客户端 · 访问 NAS 上的 AI Agent"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
