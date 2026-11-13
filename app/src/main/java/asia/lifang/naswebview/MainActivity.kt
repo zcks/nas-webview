@@ -30,6 +30,7 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.Switch
 import android.widget.TextView
@@ -42,7 +43,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -97,7 +97,6 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- 浏览 ----------
     private lateinit var webView: WebView
-    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar
     private lateinit var errorView: View
     private lateinit var errorMessage: TextView
@@ -228,7 +227,6 @@ class MainActivity : AppCompatActivity() {
         tileAwakeLabel = findViewById(R.id.tileAwakeLabel)
 
         webView = findViewById(R.id.webView)
-        swipeRefresh = findViewById(R.id.swipeRefresh)
         progressBar = findViewById(R.id.progressBar)
         errorView = findViewById(R.id.errorView)
         errorMessage = findViewById(R.id.errorMessage)
@@ -480,6 +478,18 @@ class MainActivity : AppCompatActivity() {
                 val uri = request?.url ?: return false
                 return when (uri.scheme?.lowercase()) {
                     "http", "https" -> false
+                    "intent" -> {
+                        // intent:// 链接：按标准方式解析并尝试唤起外部应用
+                        try {
+                            val intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
+                            intent.addCategory(Intent.CATEGORY_BROWSABLE)
+                            intent.component = null
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            toast("无法打开该链接")
+                        }
+                        true
+                    }
                     else -> {
                         try {
                             startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -499,7 +509,6 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                swipeRefresh.isRefreshing = false
                 progressBar.isVisible = false
             }
 
@@ -574,8 +583,10 @@ class MainActivity : AppCompatActivity() {
             startDownload(url, userAgent, contentDisposition, mimeType)
         }
 
-        swipeRefresh.setColorSchemeResources(R.color.accent)
-        swipeRefresh.setOnRefreshListener { retry() }
+        // 滚动交给网页本身；系统滚动条隐藏，避免叠在网页滚动条上
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
+        setupLongPressMenu()
 
         findViewById<Button>(R.id.btnRetry).setOnClickListener { retry() }
         findViewById<Button>(R.id.btnSwitchLine).setOnClickListener {
@@ -587,28 +598,91 @@ class MainActivity : AppCompatActivity() {
         currentUrl = url
         browseInitialized = true
         errorView.isVisible = false
-        swipeRefresh.isVisible = true
-        swipeRefresh.isRefreshing = true
         webView.loadUrl(url)
         updateDrawerStatus(probeNow = false)
     }
 
     private fun retry() {
         errorView.isVisible = false
-        swipeRefresh.isVisible = true
-        swipeRefresh.isRefreshing = true
         val url = webView.url
         if (url.isNullOrEmpty() || url == "about:blank") webView.loadUrl(currentUrl) else webView.reload()
     }
 
     private fun showError(message: String) {
         progressBar.isVisible = false
-        swipeRefresh.isRefreshing = false
-        swipeRefresh.isVisible = false
         errorView.isVisible = true
         errorMessage.text = message
         findViewById<Button>(R.id.btnSwitchLine).text =
             getString(if (currentLine == LINE_LAN) R.string.switch_to_wan else R.string.switch_to_lan)
+    }
+
+    /** 长按链接/图片弹出操作菜单（正经 WebView 外壳的标配能力）。 */
+    private fun setupLongPressMenu() {
+        webView.setOnLongClickListener { v ->
+            val hit = webView.hitTestResult
+            val extra = hit.extra
+            if (extra.isNullOrBlank()) return@setOnLongClickListener false
+            when (hit.type) {
+                WebView.HitTestResult.SRC_ANCHOR_TYPE,
+                WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                    showLinkMenu(v, extra); true
+                }
+                WebView.HitTestResult.IMAGE_TYPE -> {
+                    showImageMenu(v, extra); true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun showLinkMenu(anchor: View, url: String) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.apply {
+            add(0, 1, 0, "复制链接")
+            add(0, 2, 1, "用系统浏览器打开")
+            add(0, 3, 2, "下载链接内容")
+        }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> copyToClipboard("url", url, "已复制链接")
+                2 -> tryOpenExternally(url)
+                3 -> startDownload(url, null, null, null)
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showImageMenu(anchor: View, url: String) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.apply {
+            add(0, 1, 0, "保存图片")
+            add(0, 2, 1, "复制图片地址")
+            add(0, 3, 2, "用系统浏览器打开")
+        }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> startDownload(url, null, null, "image/*")
+                2 -> copyToClipboard("img", url, "已复制图片地址")
+                3 -> tryOpenExternally(url)
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun tryOpenExternally(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: ActivityNotFoundException) {
+            toast("没有可以打开此链接的应用")
+        }
+    }
+
+    private fun copyToClipboard(label: String, text: String, msg: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        toast(msg)
     }
 
     private fun currentDisplayUrl(): String =
@@ -775,6 +849,7 @@ class MainActivity : AppCompatActivity() {
         webView.stopLoading()
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.destroy()
+        CookieManager.getInstance().flush() // 确保 Cookie/登录态落盘
         super.onDestroy()
     }
 
