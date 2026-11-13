@@ -28,9 +28,12 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.ImageButton
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -44,53 +47,87 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * NAS WebView：手机上的 Web 界面壳应用。
- *
- * - 内网地址（明文 HTTP）与外网地址（HTTPS）一键切换
- * - 启动时自动探测内网可达性，可达走内网，否则走外网
- * - WebView 支持 JS / 本地存储 / Cookie / 文件上传下载 / 摄像头麦克风
+ * NAS WebView v1.1：原生控制台 + 浏览 + 设置 三屏。
  */
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        const val URL_LAN = "http://192.168.31.15:8758"
-        const val URL_WAN = "https://nas.lifang.asia:8758"
+        const val DEFAULT_URL_LAN = "http://192.168.31.15:8758"
+        const val DEFAULT_URL_WAN = "https://nas.lifang.asia:8758"
 
         private const val PREFS_NAME = "nas_webview_prefs"
-        private const val KEY_LAST_URL = "last_url"
+        private const val KEY_URL_LAN = "url_lan"
+        private const val KEY_URL_WAN = "url_wan"
+        private const val KEY_START_MODE = "start_mode"   // auto | lan | wan
         private const val KEY_KEEP_AWAKE = "keep_awake"
+        private const val KEY_LAST_LINE = "last_line"
         private const val KEY_STATE_URL = "state_url"
+
+        private const val LINE_LAN = "lan"
+        private const val LINE_WAN = "wan"
+
         private const val EXIT_INTERVAL_MS = 2000L
 
-        private const val MENU_REFRESH = 1
+        private const val MENU_SWITCH_LINE = 1
         private const val MENU_AUTO = 2
-        private const val MENU_BROWSER = 3
-        private const val MENU_COPY = 4
-        private const val MENU_KEEP_AWAKE = 5
-        private const val MENU_ABOUT = 6
+        private const val MENU_REFRESH = 3
+        private const val MENU_BROWSER = 4
+        private const val MENU_COPY = 5
+        private const val MENU_AWAKE = 6
+        private const val MENU_HOME = 7
     }
 
+    // ---------- 三屏 ----------
+    private lateinit var screenHome: View
+    private lateinit var screenBrowse: View
+    private lateinit var screenSettings: View
+    private lateinit var tabHome: LinearLayout
+    private lateinit var tabBrowse: LinearLayout
+    private lateinit var tabSettings: LinearLayout
+    private var screenMode = "home"
+
+    // ---------- 首页 ----------
+    private lateinit var bannerTitle: TextView
+    private lateinit var bannerSub: TextView
+    private lateinit var addrLan: TextView
+    private lateinit var addrWan: TextView
+    private lateinit var metaLan: TextView
+    private lateinit var metaWan: TextView
+    private lateinit var checkLan: ImageView
+    private lateinit var checkWan: ImageView
+    private lateinit var tileAwakeLabel: TextView
+
+    // ---------- 浏览 ----------
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar
     private lateinit var errorView: View
     private lateinit var errorMessage: TextView
-    private lateinit var btnLan: Button
-    private lateinit var btnWan: Button
-    private lateinit var btnSwitch: Button
-    private lateinit var titleText: TextView
+    private lateinit var capsuleDot: TextView
+    private lateinit var capsuleText: TextView
 
-    private var currentUrl: String = URL_WAN
+    // ---------- 设置 ----------
+    private lateinit var segAuto: Button
+    private lateinit var segLan: Button
+    private lateinit var segWan: Button
+    private lateinit var switchProbe: Switch
+    private lateinit var switchAwake: Switch
+    private lateinit var etLan: EditText
+    private lateinit var etWan: EditText
+
+    private val prefs by lazy { getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+    private val urlLan: String get() = prefs.getString(KEY_URL_LAN, DEFAULT_URL_LAN) ?: DEFAULT_URL_LAN
+    private val urlWan: String get() = prefs.getString(KEY_URL_WAN, DEFAULT_URL_WAN) ?: DEFAULT_URL_WAN
+
+    private var currentLine = LINE_LAN
+    private var currentUrl = DEFAULT_URL_LAN
     private var lastBackPressedAt = 0L
-    private var keepAwake = true
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingPermissionRequest: PermissionRequest? = null
     private var pendingDownloadAction: (() -> Unit)? = null
 
-    private val prefs by lazy { getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
-
-    // ---------- 文件选择（网页里的上传按钮） ----------
+    // ---------- 文件选择 ----------
     private val fileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val callback = filePathCallback
@@ -111,7 +148,7 @@ class MainActivity : AppCompatActivity() {
         return data?.data?.let { arrayOf(it) }
     }
 
-    // ---------- 网页摄像头 / 麦克风授权 ----------
+    // ---------- 摄像头/麦克风授权 ----------
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
             val request = pendingPermissionRequest
@@ -125,7 +162,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    // ---------- Android 9 及以下的下载存储权限 ----------
+    // ---------- 下载存储权限 ----------
     private val storagePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val action = pendingDownloadAction
@@ -138,48 +175,211 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         bindViews()
-        setupWebView()
+        setupTabs()
+        setupHome()
+        setupBrowse()
+        setupSettings()
         setupBackNavigation()
-
-        keepAwake = prefs.getBoolean(KEY_KEEP_AWAKE, true)
         applyKeepAwake()
 
         if (savedInstanceState != null) {
-            currentUrl = savedInstanceState.getString(KEY_STATE_URL)
-                ?: prefs.getString(KEY_LAST_URL, URL_WAN)
-                ?: URL_WAN
-            updateModeButtons()
+            currentUrl = savedInstanceState.getString(KEY_STATE_URL) ?: currentUrl
             webView.restoreState(savedInstanceState)
-        } else {
-            autoDetectAndLoad()
         }
+        showScreen("home")
     }
 
     private fun bindViews() {
+        screenHome = findViewById(R.id.screenHomeRoot)
+        screenBrowse = findViewById(R.id.screenBrowseRoot)
+        screenSettings = findViewById(R.id.screenSettingsRoot)
+        tabHome = findViewById(R.id.tabHome)
+        tabBrowse = findViewById(R.id.tabBrowse)
+        tabSettings = findViewById(R.id.tabSettings)
+
+        bannerTitle = findViewById(R.id.bannerTitle)
+        bannerSub = findViewById(R.id.bannerSub)
+        addrLan = findViewById(R.id.addrLan)
+        addrWan = findViewById(R.id.addrWan)
+        metaLan = findViewById(R.id.metaLan)
+        metaWan = findViewById(R.id.metaWan)
+        checkLan = findViewById(R.id.checkLan)
+        checkWan = findViewById(R.id.checkWan)
+        tileAwakeLabel = findViewById(R.id.tileAwakeLabel)
+
         webView = findViewById(R.id.webView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         progressBar = findViewById(R.id.progressBar)
         errorView = findViewById(R.id.errorView)
         errorMessage = findViewById(R.id.errorMessage)
-        btnLan = findViewById(R.id.btnLan)
-        btnWan = findViewById(R.id.btnWan)
-        btnSwitch = findViewById(R.id.btnSwitch)
-        titleText = findViewById(R.id.titleText)
+        capsuleDot = findViewById(R.id.capsuleDot)
+        capsuleText = findViewById(R.id.capsuleText)
 
-        btnLan.setOnClickListener { loadUrl(URL_LAN) }
-        btnWan.setOnClickListener { loadUrl(URL_WAN) }
-        findViewById<Button>(R.id.btnAuto).setOnClickListener { autoDetectAndLoad() }
-        findViewById<Button>(R.id.btnRetry).setOnClickListener { retry() }
-        btnSwitch.setOnClickListener {
-            loadUrl(if (currentUrl == URL_LAN) URL_WAN else URL_LAN)
-        }
-        findViewById<ImageButton>(R.id.btnRefresh).setOnClickListener { retry() }
-        findViewById<ImageButton>(R.id.btnMenu).setOnClickListener { showMenu(it) }
+        segAuto = findViewById(R.id.segAuto)
+        segLan = findViewById(R.id.segLan)
+        segWan = findViewById(R.id.segWan)
+        switchProbe = findViewById(R.id.switchProbe)
+        switchAwake = findViewById(R.id.switchAwake)
+        etLan = findViewById(R.id.etLan)
+        etWan = findViewById(R.id.etWan)
     }
 
-    // ==================== WebView ====================
+    // ==================== 导航 ====================
 
-    private fun setupWebView() {
+    private fun setupTabs() {
+        tabHome.setOnClickListener { showScreen("home") }
+        tabBrowse.setOnClickListener { showScreen("browse") }
+        tabSettings.setOnClickListener { showScreen("settings") }
+    }
+
+    private fun showScreen(mode: String) {
+        screenMode = mode
+        screenHome.isVisible = mode == "home"
+        screenBrowse.isVisible = mode == "browse"
+        screenSettings.isVisible = mode == "settings"
+
+        tabHome.setBackgroundResource(if (mode == "home") R.drawable.bg_tab_pill else 0)
+        tabBrowse.setBackgroundResource(if (mode == "browse") R.drawable.bg_tab_pill else 0)
+        tabSettings.setBackgroundResource(if (mode == "settings") R.drawable.bg_tab_pill else 0)
+        tintTab(tabHome, mode == "home")
+        tintTab(tabBrowse, mode == "browse")
+        tintTab(tabSettings, mode == "settings")
+
+        when (mode) {
+            "home" -> refreshHomeStatus()
+            "settings" -> fillSettings()
+        }
+    }
+
+    private fun tintTab(tab: LinearLayout, selected: Boolean) {
+        val color = ContextCompat.getColor(this, if (selected) R.color.white else R.color.text_secondary)
+        for (i in 0 until tab.childCount) {
+            when (val child = tab.getChildAt(i)) {
+                is ImageView -> child.setColorFilter(color)
+                is TextView -> child.setTextColor(color)
+            }
+        }
+    }
+
+    // ==================== 首页 ====================
+
+    private fun setupHome() {
+        findViewById<Button>(R.id.btnEnterLan).setOnClickListener { enterLine(LINE_LAN) }
+        findViewById<Button>(R.id.btnEnterWan).setOnClickListener { enterLine(LINE_WAN) }
+        findViewById<View>(R.id.tileAuto).setOnClickListener { autoSelectAndEnter() }
+        findViewById<View>(R.id.tileRefresh).setOnClickListener {
+            toast("重新检测中…")
+            refreshHomeStatus(force = true)
+        }
+        findViewById<View>(R.id.tileAwake).setOnClickListener { toggleAwake() }
+    }
+
+    private fun refreshHomeStatus(force: Boolean = false) {
+        addrLan.text = urlLan
+        addrWan.text = urlWan
+        if (!force && !prefs.getBoolean("auto_probe", true)) {
+            bannerTitle.text = "自动检测已关闭"
+            bannerSub.text = "点击「重新检测」手动检测线路"
+            return
+        }
+        bannerTitle.text = "正在检测线路…"
+        bannerSub.text = "请稍候"
+        probe(urlLan) { lanMs ->
+            probe(urlWan) { wanMs ->
+                if (isFinishing || isDestroyed) return@probe
+                updateHomeStatus(lanMs, wanMs)
+            }
+        }
+    }
+
+    private fun updateHomeStatus(lanMs: Int, wanMs: Int) {
+        val activeLan = currentLine == LINE_LAN
+        checkLan.isVisible = activeLan
+        checkWan.isVisible = !activeLan
+
+        metaLan.text = lineMeta(lanMs, activeLan)
+        metaLan.setTextColor(ContextCompat.getColor(this, if (lanMs >= 0) R.color.green else R.color.text_muted))
+        metaWan.text = lineMeta(wanMs, !activeLan)
+        metaWan.setTextColor(ContextCompat.getColor(this, if (wanMs >= 0) R.color.green else R.color.text_muted))
+
+        bannerTitle.text = when {
+            lanMs >= 0 -> "服务运行中 · 内网连接稳定"
+            wanMs >= 0 -> "内网不可达 · 可使用外网线路"
+            else -> "两条线路均不可达"
+        }
+        bannerSub.text = "内网 ${fmtMs(lanMs)} · 外网 ${fmtMs(wanMs)} · 刚刚检测"
+    }
+
+    private fun lineMeta(ms: Int, active: Boolean): String {
+        val s = if (ms >= 0) "延迟 ${ms}ms" else "当前网络不可达"
+        return if (active) "$s · 当前使用" else s
+    }
+
+    private fun fmtMs(ms: Int): String = if (ms >= 0) "${ms}ms" else "不可达"
+
+    /** 探测 URL 延迟（毫秒），失败返回 -1。 */
+    private fun probe(url: String, cb: (Int) -> Unit) {
+        Thread {
+            val start = System.currentTimeMillis()
+            val ms = try {
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.connectTimeout = 1500
+                conn.readTimeout = 1500
+                conn.requestMethod = "GET"
+                conn.instanceFollowRedirects = true
+                val code = conn.responseCode
+                conn.disconnect()
+                if (code in 200..499) (System.currentTimeMillis() - start).toInt() else -1
+            } catch (e: Exception) {
+                -1
+            }
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) cb(ms)
+            }
+        }.start()
+    }
+
+    private fun enterLine(line: String) {
+        currentLine = line
+        currentUrl = if (line == LINE_WAN) urlWan else urlLan
+        prefs.edit().putString(KEY_LAST_LINE, line).apply()
+        showScreen("browse")
+        loadUrl(currentUrl)
+    }
+
+    private fun autoSelectAndEnter() {
+        toast("正在探测最优线路…")
+        probe(urlLan) { lanMs ->
+            probe(urlWan) { wanMs ->
+                when {
+                    lanMs >= 0 -> enterLine(LINE_LAN)
+                    wanMs >= 0 -> enterLine(LINE_WAN)
+                    else -> {
+                        toast("两条线路均不可达，进入上次使用的线路")
+                        enterLine(prefs.getString(KEY_LAST_LINE, LINE_LAN) ?: LINE_LAN)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun toggleAwake() {
+        val on = !prefs.getBoolean(KEY_KEEP_AWAKE, true)
+        prefs.edit().putBoolean(KEY_KEEP_AWAKE, on).apply()
+        applyKeepAwake()
+        toast(if (on) "已开启屏幕常亮" else "已关闭屏幕常亮")
+    }
+
+    private fun applyKeepAwake() {
+        val on = prefs.getBoolean(KEY_KEEP_AWAKE, true)
+        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        tileAwakeLabel.text = if (on) "常亮·开" else "常亮·关"
+    }
+
+    // ==================== 浏览 ====================
+
+    private fun setupBrowse() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -192,8 +392,7 @@ class MainActivity : AppCompatActivity() {
             displayZoomControls = false
             cacheMode = WebSettings.LOAD_DEFAULT
             mediaPlaybackRequiresUserGesture = false
-            // 禁止 HTTPS 页面加载 HTTP 子资源（如页面出现混合内容被拦截，
-            // 可改回 WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE）
+            // 禁止 HTTPS 页面加载 HTTP 子资源（如需要可改回 MIXED_CONTENT_COMPATIBILITY_MODE）
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false)
             allowFileAccess = false
@@ -202,17 +401,14 @@ class MainActivity : AppCompatActivity() {
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
-
-        // 调试构建允许 chrome://inspect 远程调试
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return false
                 return when (uri.scheme?.lowercase()) {
-                    "http", "https" -> false // 应用内加载
+                    "http", "https" -> false
                     else -> {
-                        // tel: / mailto: / intent: 等交给系统处理
                         try {
                             startActivity(Intent(Intent.ACTION_VIEW, uri))
                         } catch (e: ActivityNotFoundException) {
@@ -243,7 +439,6 @@ class MainActivity : AppCompatActivity() {
                 super.onReceivedError(view, request, error)
                 if (request?.isForMainFrame != true) return
                 val desc = error?.description?.toString().orEmpty()
-                // 主动中断的加载（如点击了下载链接）不是真正的错误
                 if (desc.contains("ERR_ABORTED")) return
                 showError(desc.ifBlank { getString(R.string.error_title) })
             }
@@ -253,11 +448,6 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 progressBar.isVisible = newProgress in 0..99
                 progressBar.progress = newProgress
-            }
-
-            override fun onReceivedTitle(view: WebView?, title: String?) {
-                super.onReceivedTitle(view, title)
-                if (!title.isNullOrBlank()) titleText.text = title
             }
 
             override fun onShowFileChooser(
@@ -276,7 +466,6 @@ class MainActivity : AppCompatActivity() {
                     fileChooserLauncher.launch(intent)
                     true
                 } catch (e: ActivityNotFoundException) {
-                    // 回调已消费（onReceiveValue(null)），按契约返回 true
                     this@MainActivity.filePathCallback = null
                     filePathCallback?.onReceiveValue(null)
                     toast("没有可用的文件管理器")
@@ -313,21 +502,29 @@ class MainActivity : AppCompatActivity() {
             startDownload(url, userAgent, contentDisposition, mimeType)
         }
 
-        swipeRefresh.setColorSchemeResources(R.color.primary)
+        swipeRefresh.setColorSchemeResources(R.color.accent)
         swipeRefresh.setOnRefreshListener { retry() }
-    }
 
-    // ==================== 加载 / 切换 ====================
+        findViewById<View>(R.id.capsule).setOnClickListener { showBrowseMenu(it) }
+        findViewById<View>(R.id.btnFabRefresh).setOnClickListener { retry() }
+        findViewById<Button>(R.id.btnRetry).setOnClickListener { retry() }
+        findViewById<Button>(R.id.btnSwitchLine).setOnClickListener {
+            enterLine(if (currentLine == LINE_LAN) LINE_WAN else LINE_LAN)
+        }
+    }
 
     private fun loadUrl(url: String) {
         currentUrl = url
-        prefs.edit().putString(KEY_LAST_URL, url).apply()
         errorView.isVisible = false
         swipeRefresh.isVisible = true
         swipeRefresh.isRefreshing = true
-        titleText.text = Uri.parse(url).host ?: url
-        updateModeButtons()
+        updateCapsule()
         webView.loadUrl(url)
+    }
+
+    private fun updateCapsule() {
+        capsuleText.text = "${if (currentLine == LINE_LAN) "内网" else "外网"} · ${Uri.parse(currentUrl).host ?: currentUrl}"
+        capsuleDot.setBackgroundResource(if (currentLine == LINE_LAN) R.drawable.bg_dot else R.drawable.bg_dot_blue)
     }
 
     private fun retry() {
@@ -335,47 +532,7 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.isVisible = true
         swipeRefresh.isRefreshing = true
         val url = webView.url
-        if (url.isNullOrEmpty() || url == "about:blank") {
-            webView.loadUrl(currentUrl)
-        } else {
-            webView.reload()
-        }
-    }
-
-    /** 启动/点“自动”：探测内网可达性，可达走内网，否则走外网。 */
-    private fun autoDetectAndLoad() {
-        errorView.isVisible = false
-        swipeRefresh.isVisible = true
-        swipeRefresh.isRefreshing = true
-        titleText.text = getString(R.string.detecting)
-        Thread {
-            val lanOk = isUrlReachable(URL_LAN)
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                loadUrl(if (lanOk) URL_LAN else URL_WAN)
-                toast(if (lanOk) "已连接内网地址" else "内网不可达，已使用外网地址")
-            }
-        }.start()
-    }
-
-    private fun isUrlReachable(url: String): Boolean {
-        return try {
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 1500
-            conn.readTimeout = 1500
-            conn.requestMethod = "GET"
-            conn.instanceFollowRedirects = true
-            val code = conn.responseCode
-            conn.disconnect()
-            code in 200..499
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun updateModeButtons() {
-        btnLan.isSelected = currentUrl == URL_LAN
-        btnWan.isSelected = currentUrl == URL_WAN
+        if (url.isNullOrEmpty() || url == "about:blank") webView.loadUrl(currentUrl) else webView.reload()
     }
 
     private fun showError(message: String) {
@@ -384,46 +541,42 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.isVisible = false
         errorView.isVisible = true
         errorMessage.text = message
-        btnSwitch.text = getString(
-            if (currentUrl == URL_LAN) R.string.switch_to_wan else R.string.switch_to_lan
-        )
+        findViewById<Button>(R.id.btnSwitchLine).text =
+            getString(if (currentLine == LINE_LAN) R.string.switch_to_wan else R.string.switch_to_lan)
     }
 
-    // ==================== 菜单 ====================
-
-    private fun showMenu(anchor: View) {
+    private fun showBrowseMenu(anchor: View) {
+        val otherName = if (currentLine == LINE_LAN) "外网" else "内网"
         val popup = PopupMenu(this, anchor)
         popup.menu.apply {
-            add(0, MENU_REFRESH, 0, "刷新页面")
-            add(0, MENU_AUTO, 1, "自动选择地址")
-            add(0, MENU_BROWSER, 2, "用系统浏览器打开")
-            add(0, MENU_COPY, 3, "复制当前地址")
-            add(0, MENU_KEEP_AWAKE, 4, "屏幕常亮").apply {
+            add(0, MENU_SWITCH_LINE, 0, "切换到$otherName")
+            add(0, MENU_AUTO, 1, "自动选择线路")
+            add(0, MENU_REFRESH, 2, "刷新页面")
+            add(0, MENU_BROWSER, 3, "用系统浏览器打开")
+            add(0, MENU_COPY, 4, "复制当前地址")
+            add(0, MENU_AWAKE, 5, "屏幕常亮").apply {
                 isCheckable = true
-                isChecked = keepAwake
+                isChecked = prefs.getBoolean(KEY_KEEP_AWAKE, true)
             }
-            add(0, MENU_ABOUT, 5, "关于")
+            add(0, MENU_HOME, 6, "返回首页")
         }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                MENU_SWITCH_LINE -> enterLine(if (currentLine == LINE_LAN) LINE_WAN else LINE_LAN)
+                MENU_AUTO -> autoSelectAndEnter()
                 MENU_REFRESH -> retry()
-                MENU_AUTO -> autoDetectAndLoad()
                 MENU_BROWSER -> openInBrowser()
                 MENU_COPY -> copyCurrentUrl()
-                MENU_KEEP_AWAKE -> {
-                    keepAwake = !keepAwake
-                    prefs.edit().putBoolean(KEY_KEEP_AWAKE, keepAwake).apply()
-                    applyKeepAwake()
-                    toast(if (keepAwake) "已开启屏幕常亮" else "已关闭屏幕常亮")
-                }
-                MENU_ABOUT -> showAbout()
+                MENU_AWAKE -> toggleAwake()
+                MENU_HOME -> showScreen("home")
             }
             true
         }
         popup.show()
     }
 
-    private fun currentDisplayUrl(): String = webView.url?.takeIf { it != "about:blank" } ?: currentUrl
+    private fun currentDisplayUrl(): String =
+        webView.url?.takeIf { it != "about:blank" } ?: currentUrl
 
     private fun openInBrowser() {
         try {
@@ -439,27 +592,72 @@ class MainActivity : AppCompatActivity() {
         toast("已复制地址")
     }
 
+    // ==================== 设置 ====================
+
+    private fun setupSettings() {
+        segAuto.setOnClickListener { saveStartMode("auto") }
+        segLan.setOnClickListener { saveStartMode("lan") }
+        segWan.setOnClickListener { saveStartMode("wan") }
+
+        switchProbe.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("auto_probe", checked).apply()
+        }
+        switchAwake.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean(KEY_KEEP_AWAKE, checked).apply()
+            applyKeepAwake()
+        }
+
+        findViewById<Button>(R.id.btnSaveAddr).setOnClickListener { saveAddresses() }
+        findViewById<Button>(R.id.btnAbout).setOnClickListener { showAbout() }
+    }
+
+    private fun fillSettings() {
+        when (prefs.getString(KEY_START_MODE, "auto")) {
+            "lan" -> saveStartMode("lan", persist = false)
+            "wan" -> saveStartMode("wan", persist = false)
+            else -> saveStartMode("auto", persist = false)
+        }
+        switchProbe.isChecked = prefs.getBoolean("auto_probe", true)
+        switchAwake.isChecked = prefs.getBoolean(KEY_KEEP_AWAKE, true)
+        etLan.setText(urlLan)
+        etWan.setText(urlWan)
+        findViewById<TextView>(R.id.aboutVersion).text = "NAS WebView v${BuildConfig.VERSION_NAME}"
+    }
+
+    private fun saveStartMode(mode: String, persist: Boolean = true) {
+        if (persist) prefs.edit().putString(KEY_START_MODE, mode).apply()
+        val sel = ContextCompat.getColor(this, R.color.accent)
+        val unsel = ContextCompat.getColor(this, R.color.surface2)
+        val white = ContextCompat.getColor(this, R.color.white)
+        val sub = ContextCompat.getColor(this, R.color.text_primary)
+        segAuto.setBackgroundColor(if (mode == "auto") sel else unsel)
+        segLan.setBackgroundColor(if (mode == "lan") sel else unsel)
+        segWan.setBackgroundColor(if (mode == "wan") sel else unsel)
+        segAuto.setTextColor(if (mode == "auto") white else sub)
+        segLan.setTextColor(if (mode == "lan") white else sub)
+        segWan.setTextColor(if (mode == "wan") white else sub)
+    }
+
+    private fun saveAddresses() {
+        val lan = etLan.text.toString().trim()
+        val wan = etWan.text.toString().trim()
+        fun valid(u: String) = u.startsWith("http://") || u.startsWith("https://")
+        if (!valid(lan) || !valid(wan)) {
+            toast("地址需以 http:// 或 https:// 开头")
+            return
+        }
+        prefs.edit().putString(KEY_URL_LAN, lan).putString(KEY_URL_WAN, wan).apply()
+        addrLan.text = lan
+        addrWan.text = wan
+        toast("地址已保存")
+    }
+
     private fun showAbout() {
         AlertDialog.Builder(this)
             .setTitle(R.string.app_name)
-            .setMessage(
-                getString(
-                    R.string.about_message,
-                    BuildConfig.VERSION_NAME,
-                    URL_LAN,
-                    URL_WAN
-                )
-            )
+            .setMessage(getString(R.string.about_message, BuildConfig.VERSION_NAME, urlLan, urlWan))
             .setPositiveButton(android.R.string.ok, null)
             .show()
-    }
-
-    private fun applyKeepAwake() {
-        if (keepAwake) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
     }
 
     // ==================== 下载 ====================
@@ -500,15 +698,17 @@ class MainActivity : AppCompatActivity() {
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView.canGoBack() && !errorView.isVisible) {
-                    webView.goBack()
-                } else {
-                    val now = System.currentTimeMillis()
-                    if (now - lastBackPressedAt < EXIT_INTERVAL_MS) {
-                        finish()
-                    } else {
-                        lastBackPressedAt = now
-                        toast(getString(R.string.exit_hint))
+                when {
+                    screenMode == "browse" && webView.canGoBack() && !errorView.isVisible -> webView.goBack()
+                    screenMode != "home" -> showScreen("home")
+                    else -> {
+                        val now = System.currentTimeMillis()
+                        if (now - lastBackPressedAt < EXIT_INTERVAL_MS) {
+                            finish()
+                        } else {
+                            lastBackPressedAt = now
+                            toast(getString(R.string.exit_hint))
+                        }
                     }
                 }
             }
