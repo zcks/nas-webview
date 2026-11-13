@@ -46,15 +46,12 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <TextView
+            <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
                 android:background="@drawable/bg_avatar"
-                android:gravity="center"
-                android:text="Z"
-                android:textColor="@color/white"
-                android:textSize="24sp"
-                android:textStyle="bold" />
+                android:padding="3dp"
+                android:src="@drawable/ic_avatar" />
         </LinearLayout>
 
         <!-- 状态横幅 -->
