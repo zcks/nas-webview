@@ -30,8 +30,6 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.Switch
 import android.widget.TextView
@@ -41,13 +39,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * NAS WebView v1.1：原生控制台 + 浏览 + 设置 三屏。
+ * NAS WebView v1.2：启动即全屏 Web；控制台/浏览/设置与线路切换收纳于左侧抽屉。
  */
 class MainActivity : AppCompatActivity() {
 
@@ -69,24 +69,20 @@ class MainActivity : AppCompatActivity() {
         private const val LINE_WAN = "wan"
 
         private const val EXIT_INTERVAL_MS = 2000L
-
-        private const val MENU_SWITCH_LINE = 1
-        private const val MENU_AUTO = 2
-        private const val MENU_REFRESH = 3
-        private const val MENU_BROWSER = 4
-        private const val MENU_COPY = 5
-        private const val MENU_AWAKE = 6
-        private const val MENU_HOME = 7
     }
+
+    // ---------- 抽屉 ----------
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var drawerStatusDot: TextView
+    private lateinit var drawerStatusText: TextView
+    private lateinit var drawerSub: TextView
+    private lateinit var drawerAwakeState: TextView
 
     // ---------- 三屏 ----------
     private lateinit var screenHome: View
     private lateinit var screenBrowse: View
     private lateinit var screenSettings: View
-    private lateinit var tabHome: LinearLayout
-    private lateinit var tabBrowse: LinearLayout
-    private lateinit var tabSettings: LinearLayout
-    private var screenMode = "home"
+    private var screenMode = "browse"
 
     // ---------- 首页 ----------
     private lateinit var bannerTitle: TextView
@@ -105,8 +101,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var errorView: View
     private lateinit var errorMessage: TextView
-    private lateinit var capsuleDot: TextView
-    private lateinit var capsuleText: TextView
 
     // ---------- 设置 ----------
     private lateinit var segAuto: Button
@@ -178,7 +172,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         bindViews()
-        setupTabs()
+        setupDrawer()
         setupHome()
         setupBrowse()
         setupSettings()
@@ -188,19 +182,40 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState != null) {
             currentUrl = savedInstanceState.getString(KEY_STATE_URL) ?: currentUrl
             currentLine = savedInstanceState.getString(KEY_STATE_LINE) ?: currentLine
+            browseInitialized = true
             webView.restoreState(savedInstanceState)
-            updateCapsule()
+            showScreen("browse")
+            updateDrawerStatus(probeNow = false)
+        } else {
+            startAccordingToSettings()
         }
-        showScreen("home")
+    }
+
+    /** 启动即进入全屏 Web：按「默认启动线路」设置选路。 */
+    private fun startAccordingToSettings() {
+        when (prefs.getString(KEY_START_MODE, "auto")) {
+            "lan" -> enterLine(LINE_LAN)
+            "wan" -> enterLine(LINE_WAN)
+            else -> {
+                if (prefs.getBoolean(KEY_AUTO_PROBE, true)) {
+                    autoSelectAndEnter(silent = true)
+                } else {
+                    enterLine(prefs.getString(KEY_LAST_LINE, LINE_LAN) ?: LINE_LAN)
+                }
+            }
+        }
     }
 
     private fun bindViews() {
+        drawerLayout = findViewById(R.id.drawerLayout)
+        drawerStatusDot = findViewById(R.id.drawerStatusDot)
+        drawerStatusText = findViewById(R.id.drawerStatusText)
+        drawerSub = findViewById(R.id.drawerSub)
+        drawerAwakeState = findViewById(R.id.drawerAwakeState)
+
         screenHome = findViewById(R.id.screenHomeRoot)
         screenBrowse = findViewById(R.id.screenBrowseRoot)
         screenSettings = findViewById(R.id.screenSettingsRoot)
-        tabHome = findViewById(R.id.tabHome)
-        tabBrowse = findViewById(R.id.tabBrowse)
-        tabSettings = findViewById(R.id.tabSettings)
 
         bannerTitle = findViewById(R.id.bannerTitle)
         bannerSub = findViewById(R.id.bannerSub)
@@ -217,8 +232,6 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         errorView = findViewById(R.id.errorView)
         errorMessage = findViewById(R.id.errorMessage)
-        capsuleDot = findViewById(R.id.capsuleDot)
-        capsuleText = findViewById(R.id.capsuleText)
 
         segAuto = findViewById(R.id.segAuto)
         segLan = findViewById(R.id.segLan)
@@ -229,51 +242,93 @@ class MainActivity : AppCompatActivity() {
         etWan = findViewById(R.id.etWan)
     }
 
-    // ==================== 导航 ====================
+    // ==================== 抽屉 ====================
 
-    private fun setupTabs() {
-        tabHome.setOnClickListener { showScreen("home") }
-        tabBrowse.setOnClickListener {
-            // 首次进浏览页：按「默认启动线路」设置选择线路
-            if (browseInitialized) {
-                showScreen("browse")
-            } else {
-                when (prefs.getString(KEY_START_MODE, "auto")) {
-                    "lan" -> enterLine(LINE_LAN)
-                    "wan" -> enterLine(LINE_WAN)
-                    else -> autoSelectAndEnter()
+    private fun setupDrawer() {
+        findViewById<TextView>(R.id.drawerVersion).text = "v${BuildConfig.VERSION_NAME}"
+        findViewById<View>(R.id.btnDrawer).setOnClickListener { openDrawer() }
+        findViewById<View>(R.id.itemHome).setOnClickListener {
+            closeDrawer(); showScreen("home")
+        }
+        findViewById<View>(R.id.itemBrowse).setOnClickListener {
+            closeDrawer()
+            if (browseInitialized) showScreen("browse")
+            else startAccordingToSettings()
+        }
+        findViewById<View>(R.id.itemSettings).setOnClickListener {
+            closeDrawer(); showScreen("settings")
+        }
+        findViewById<View>(R.id.itemRefresh).setOnClickListener {
+            closeDrawer()
+            when (screenMode) {
+                "home" -> refreshHomeStatus(force = true)
+                "settings" -> {
+                    fillSettings()
+                    toast("设置已刷新")
                 }
+                else -> retry()
             }
         }
-        tabSettings.setOnClickListener { showScreen("settings") }
+        findViewById<View>(R.id.itemBrowser).setOnClickListener {
+            closeDrawer(); openInBrowser()
+        }
+        findViewById<View>(R.id.itemCopy).setOnClickListener {
+            closeDrawer(); copyCurrentUrl()
+        }
+        findViewById<View>(R.id.itemAwake).setOnClickListener {
+            toggleAwake()
+        }
+        findViewById<Button>(R.id.btnDrawerLan).setOnClickListener {
+            closeDrawer(); enterLine(LINE_LAN)
+        }
+        findViewById<Button>(R.id.btnDrawerWan).setOnClickListener {
+            closeDrawer(); enterLine(LINE_WAN)
+        }
+        findViewById<Button>(R.id.btnDrawerAuto).setOnClickListener {
+            closeDrawer(); autoSelectAndEnter()
+        }
+
+        drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                updateDrawerStatus(probeNow = true)
+            }
+        })
     }
+
+    private fun openDrawer() {
+        drawerLayout.openDrawer(GravityCompat.START)
+    }
+
+    private fun closeDrawer() {
+        drawerLayout.closeDrawer(GravityCompat.START)
+    }
+
+    private fun updateDrawerStatus(probeNow: Boolean) {
+        val host = Uri.parse(currentUrl).host ?: currentUrl
+        drawerStatusText.text = "${if (currentLine == LINE_LAN) "内网" else "外网"} · $host"
+        drawerStatusDot.setBackgroundResource(
+            if (currentLine == LINE_LAN) R.drawable.bg_dot else R.drawable.bg_dot_blue
+        )
+        if (probeNow) {
+            drawerSub.text = "延迟检测中…"
+            probe(currentUrl) { ms ->
+                drawerSub.text = if (ms >= 0) "延迟 ${ms}ms · 刚刚检测" else "当前网络不可达"
+            }
+        } else {
+            drawerSub.text = "打开侧边栏检测延迟"
+        }
+    }
+
+    // ==================== 屏幕切换 ====================
 
     private fun showScreen(mode: String) {
         screenMode = mode
         screenHome.isVisible = mode == "home"
         screenBrowse.isVisible = mode == "browse"
         screenSettings.isVisible = mode == "settings"
-
-        tabHome.setBackgroundResource(if (mode == "home") R.drawable.bg_tab_pill else 0)
-        tabBrowse.setBackgroundResource(if (mode == "browse") R.drawable.bg_tab_pill else 0)
-        tabSettings.setBackgroundResource(if (mode == "settings") R.drawable.bg_tab_pill else 0)
-        tintTab(tabHome, mode == "home")
-        tintTab(tabBrowse, mode == "browse")
-        tintTab(tabSettings, mode == "settings")
-
         when (mode) {
             "home" -> refreshHomeStatus()
             "settings" -> fillSettings()
-        }
-    }
-
-    private fun tintTab(tab: LinearLayout, selected: Boolean) {
-        val color = ContextCompat.getColor(this, if (selected) R.color.white else R.color.text_secondary)
-        for (i in 0 until tab.childCount) {
-            when (val child = tab.getChildAt(i)) {
-                is ImageView -> child.setColorFilter(color)
-                is TextView -> child.setTextColor(color)
-            }
         }
     }
 
@@ -363,15 +418,15 @@ class MainActivity : AppCompatActivity() {
         loadUrl(currentUrl)
     }
 
-    private fun autoSelectAndEnter() {
-        toast("正在探测最优线路…")
+    private fun autoSelectAndEnter(silent: Boolean = false) {
+        if (!silent) toast("正在探测最优线路…")
         probe(urlLan) { lanMs ->
             probe(urlWan) { wanMs ->
                 when {
                     lanMs >= 0 -> enterLine(LINE_LAN)
                     wanMs >= 0 -> enterLine(LINE_WAN)
                     else -> {
-                        toast("两条线路均不可达，进入上次使用的线路")
+                        if (!silent) toast("两条线路均不可达，进入上次使用的线路")
                         enterLine(prefs.getString(KEY_LAST_LINE, LINE_LAN) ?: LINE_LAN)
                     }
                 }
@@ -391,6 +446,7 @@ class MainActivity : AppCompatActivity() {
         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         tileAwakeLabel.text = if (on) "常亮·开" else "常亮·关"
+        drawerAwakeState.text = if (on) "开" else "关"
     }
 
     // ==================== 浏览 ====================
@@ -521,7 +577,6 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setColorSchemeResources(R.color.accent)
         swipeRefresh.setOnRefreshListener { retry() }
 
-        findViewById<View>(R.id.capsule).setOnClickListener { showBrowseMenu(it) }
         findViewById<View>(R.id.btnFabRefresh).setOnClickListener { retry() }
         findViewById<Button>(R.id.btnRetry).setOnClickListener { retry() }
         findViewById<Button>(R.id.btnSwitchLine).setOnClickListener {
@@ -535,13 +590,8 @@ class MainActivity : AppCompatActivity() {
         errorView.isVisible = false
         swipeRefresh.isVisible = true
         swipeRefresh.isRefreshing = true
-        updateCapsule()
         webView.loadUrl(url)
-    }
-
-    private fun updateCapsule() {
-        capsuleText.text = "${if (currentLine == LINE_LAN) "内网" else "外网"} · ${Uri.parse(currentUrl).host ?: currentUrl}"
-        capsuleDot.setBackgroundResource(if (currentLine == LINE_LAN) R.drawable.bg_dot else R.drawable.bg_dot_blue)
+        updateDrawerStatus(probeNow = false)
     }
 
     private fun retry() {
@@ -560,36 +610,6 @@ class MainActivity : AppCompatActivity() {
         errorMessage.text = message
         findViewById<Button>(R.id.btnSwitchLine).text =
             getString(if (currentLine == LINE_LAN) R.string.switch_to_wan else R.string.switch_to_lan)
-    }
-
-    private fun showBrowseMenu(anchor: View) {
-        val otherName = if (currentLine == LINE_LAN) "外网" else "内网"
-        val popup = PopupMenu(this, anchor)
-        popup.menu.apply {
-            add(0, MENU_SWITCH_LINE, 0, "切换到$otherName")
-            add(0, MENU_AUTO, 1, "自动选择线路")
-            add(0, MENU_REFRESH, 2, "刷新页面")
-            add(0, MENU_BROWSER, 3, "用系统浏览器打开")
-            add(0, MENU_COPY, 4, "复制当前地址")
-            add(0, MENU_AWAKE, 5, "屏幕常亮").apply {
-                isCheckable = true
-                isChecked = prefs.getBoolean(KEY_KEEP_AWAKE, true)
-            }
-            add(0, MENU_HOME, 6, "返回首页")
-        }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_SWITCH_LINE -> enterLine(if (currentLine == LINE_LAN) LINE_WAN else LINE_LAN)
-                MENU_AUTO -> autoSelectAndEnter()
-                MENU_REFRESH -> retry()
-                MENU_BROWSER -> openInBrowser()
-                MENU_COPY -> copyCurrentUrl()
-                MENU_AWAKE -> toggleAwake()
-                MENU_HOME -> showScreen("home")
-            }
-            true
-        }
-        popup.show()
     }
 
     private fun currentDisplayUrl(): String =
@@ -716,6 +736,7 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
+                    drawerLayout.isDrawerOpen(GravityCompat.START) -> closeDrawer()
                     screenMode == "browse" && webView.canGoBack() && !errorView.isVisible -> webView.goBack()
                     screenMode != "home" -> showScreen("home")
                     else -> {
