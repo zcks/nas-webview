@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="window_bg">#0B0E13</color>
-    <color name="top_bar_bg">#11141A</color>
-    <color name="text_primary">#E5E7EB</color>
-    <color name="text_secondary">#9CA3AF</color>
-    <color name="chip_stroke">#374151</color>
-    <color name="icon_tint">#9CA3AF</color>
-</resources>
