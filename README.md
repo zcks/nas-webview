@@ -1,21 +1,23 @@
-# NAS WebView
+# NAS Agent
 
-一款极简的 Android WebView 客户端，用来在手机上访问 NAS 的 Web 界面：
+手机上的 **NAS AI Agent 客户端**：用来访问家里 NAS 上部署的 AI Agent 会话界面（DeepSeek Harness Web）。
 
 - 内网：`http://192.168.31.15:8758`
 - 外网：`https://nas.lifang.asia:8758`
 
 APK 由 **GitHub Actions** 自动构建，不需要在自己电脑上装任何 Android 开发环境。
 
-## 功能（v1.1 · 原生三屏界面）
+## 功能（v1.3）
 
-- **首页 · 控制台**：状态横幅、内网/外网大卡片（实时探测延迟、当前线路勾选、「进入」按钮）、快捷操作（自动选择 / 重新检测 / 屏幕常亮）
-- **浏览页**：网页全屏 + 顶部悬浮胶囊（显示当前线路，点击弹出菜单：切换线路/自动选择/刷新/浏览器打开/复制地址/常亮/返回首页）+ 右下刷新按钮
-- **设置页（原生）**：默认启动线路（自动/内网/外网）、启动自动探测开关、屏幕常亮开关、内网/外网地址可自定义保存、关于
-- **自动探测**：首页实时测两条线路延迟（毫秒），自动选择走可达的线路
+- **启动即全屏 Web**：按默认线路自动进入 Agent 会话界面，屏幕零常驻覆盖元素
+- **QQ 式侧滑菜单**：屏幕左缘右滑（或点左侧中部细条）打开侧边栏
+- **侧边栏**：当前线路+延迟、内网/外网/自动切换、控制台/浏览/设置、刷新/浏览器打开/复制地址/屏幕常亮
+- **控制台**（侧边栏内页面）：两条线路状态横幅、实时延迟、快捷操作
+- **设置**（侧边栏内页面）：默认启动线路、自动探测、屏幕常亮、地址自定义、关于
+- **自动探测**：实测两条线路延迟（毫秒），自动走可达线路
 - **明文 HTTP 放行**：只放行内网地址的 HTTP；HTTPS 严格校验证书，不做绕过
-- **WebView 能力**：JavaScript、本地存储、Cookie、文件上传、下载（系统下载器）、`tel:` / `mailto:` 外链跳转、摄像头/麦克风授权
-- **移动体验**：下拉刷新、加载进度条、返回键三态（网页后退 → 回首页 → 双击退出）、深色主题
+- **WebView 能力**：JavaScript、本地存储、Cookie、文件上传、下载、`tel:` / `mailto:` 外链跳转、摄像头/麦克风授权
+- **移动体验**：下拉刷新、加载进度条、返回键四态（关抽屉 → 网页后退 → 回控制台 → 双击退出）、深色主题
 
 ## 快速开始（全程手机 + 网页即可完成）
 
@@ -36,7 +38,7 @@ APK 由 **GitHub Actions** 自动构建，不需要在自己电脑上装任何 A
      git tag v1.0.0
      git push origin v1.0.0
      ```
-     然后打开仓库 **Releases** 页面下载 `nas-webview.apk`。
+     然后打开仓库 **Releases** 页下载 `nas-webview.apk`。
 4. **手机安装**：下载后打开安装，如提示「不允许安装未知应用」，在设置里允许当前浏览器/文件管理器安装即可。**无需 root。**
 
 ## 关于签名（重要，但很简单）
@@ -95,6 +97,8 @@ const val DEFAULT_URL_WAN = "https://nas.lifang.asia:8758"
 
 ## 常见问题
 
+- **找不到侧边栏入口**  
+  从屏幕**最左缘向右滑**即可呼出（QQ 侧滑同款手势）；屏幕左侧中部有一根细竖条，点它也行。
 - **外网地址打不开**  
   注意：`nas.lifang.asia` 目前**只有 IPv6 地址（仅 AAAA 记录，无 A 记录）**。手机所在网络不支持 IPv6 时（部分 Wi-Fi / 运营商）将无法访问。建议在阿里云 DNS 补一条 IPv4 的 A 记录，或确认 8758 端口在 IPv6 上对公网开放。
 - **内网地址打不开 / 提示明文流量被阻止**  
@@ -105,5 +109,5 @@ const val DEFAULT_URL_WAN = "https://nas.lifang.asia:8758"
   app 默认禁止 HTTPS 页面加载 HTTP 子资源。如确有需要，把 `MainActivity.kt` 里的 `mixedContentMode` 改回 `WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE`。
 - **升级 app 提示安装失败**  
   debug 签名和正式签名不能互相覆盖升级，先卸载旧版再装。所以建议尽早配置正式签名。
-- **想改图标 / 应用名**  
-  图标：`app/src/main/res/drawable/ic_launcher.xml`；名称：`app/src/main/res/values/strings.xml` 里的 `app_name`。
+- **想换图标**  
+  替换 `app/src/main/res/mipmap-nodpi/ic_launcher.png`（启动图标）和 `app/src/main/res/drawable/ic_avatar.png`（应用内头像）两张图即可。
