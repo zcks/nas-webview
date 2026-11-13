@@ -28,19 +28,14 @@
             android:layout_height="match_parent"
             android:visibility="gone" />
 
-        <!-- 左上角半透明菜单把手 -->
-        <ImageView
-            android:id="@+id/btnDrawer"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_gravity="top|start"
-            android:layout_marginStart="14dp"
-            android:layout_marginTop="14dp"
-            android:alpha="0.55"
-            android:background="@drawable/bg_capsule"
-            android:padding="10dp"
-            android:src="@drawable/ic_menu"
-            android:tint="@color/text_primary" />
+        <!-- 左缘中部极细把手（不遮挡网页左上角头像），点击或左缘右滑打开侧边栏 -->
+        <View
+            android:id="@+id/edgeHandle"
+            android:layout_width="6dp"
+            android:layout_height="120dp"
+            android:layout_gravity="start|center_vertical"
+            android:alpha="0.35"
+            android:background="@drawable/bg_capsule" />
     </FrameLayout>
 
     <!-- 左侧边栏 -->
