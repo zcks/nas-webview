@@ -15,14 +15,27 @@
         android:paddingEnd="20dp"
         android:paddingBottom="24dp">
 
-        <!-- 头部：应用名 + 当前线路 -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- 头部：头像 + 应用名 + 当前线路 -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="NAS WebView"
-            android:textColor="@color/text_primary"
-            android:textSize="21sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:src="@drawable/ic_avatar" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:text="NAS Agent"
+                android:textColor="@color/text_primary"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
