@@ -5,16 +5,12 @@
     android:layout_height="match_parent"
     android:background="@color/bg">
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipeRefresh"
+    <!-- 网页区：原生滚动，不套任何下拉刷新容器（DSH 聊天列表在内层滚动，
+         套 SwipeRefreshLayout 会被误判为"始终在顶部"吃掉下滑手势） -->
+    <WebView
+        android:id="@+id/webView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <WebView
-            android:id="@+id/webView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        android:layout_height="match_parent" />
 
     <ProgressBar
         android:id="@+id/progressBar"
