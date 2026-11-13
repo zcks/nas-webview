@@ -7,15 +7,15 @@
 
 APK 由 **GitHub Actions** 自动构建，不需要在自己电脑上装任何 Android 开发环境。
 
-## 功能
+## 功能（v1.1 · 原生三屏界面）
 
-- **双地址一键切换**：顶栏「内网 / 外网」按钮，当前使用的地址高亮
-- **自动探测**：启动时（或点「自动」）探测内网地址，可达走内网，不可达自动走外网
-- **明文 HTTP 放行**：只放行 `192.168.31.15` 的 HTTP，其余仍按安全策略处理；HTTPS 使用正规证书校验，不做绕过
-- **WebView 能力**：JavaScript、本地存储、Cookie、网页文件上传、文件下载（系统下载器）、`tel:` / `mailto:` 等外链跳转
-- **网页内摄像头 / 麦克风**：语音、视频功能需要时会弹系统授权
-- **移动体验**：下拉刷新、加载进度条、返回键=网页后退（双击退出）、屏幕常亮开关（默认开）
-- **加载失败页**：一键「重试」或「切换到另一地址」
+- **首页 · 控制台**：状态横幅、内网/外网大卡片（实时探测延迟、当前线路勾选、「进入」按钮）、快捷操作（自动选择 / 重新检测 / 屏幕常亮）
+- **浏览页**：网页全屏 + 顶部悬浮胶囊（显示当前线路，点击弹出菜单：切换线路/自动选择/刷新/浏览器打开/复制地址/常亮/返回首页）+ 右下刷新按钮
+- **设置页（原生）**：默认启动线路（自动/内网/外网）、启动自动探测开关、屏幕常亮开关、内网/外网地址可自定义保存、关于
+- **自动探测**：首页实时测两条线路延迟（毫秒），自动选择走可达的线路
+- **明文 HTTP 放行**：只放行内网地址的 HTTP；HTTPS 严格校验证书，不做绕过
+- **WebView 能力**：JavaScript、本地存储、Cookie、文件上传、下载（系统下载器）、`tel:` / `mailto:` 外链跳转、摄像头/麦克风授权
+- **移动体验**：下拉刷新、加载进度条、返回键三态（网页后退 → 回首页 → 双击退出）、深色主题
 
 ## 快速开始（全程手机 + 网页即可完成）
 
@@ -86,14 +86,12 @@ gradle wrapper --gradle-version 8.7
 
 ## 自定义地址
 
-地址硬编码在 [`app/src/main/java/asia/lifang/naswebview/MainActivity.kt`](app/src/main/java/asia/lifang/naswebview/MainActivity.kt) 顶部的常量里：
+v1.1 起可直接在 app 的「设置 → 访问地址」里修改并保存（无需重新打包）。默认地址定义在 [`MainActivity.kt`](app/src/main/java/asia/lifang/naswebview/MainActivity.kt) 的 `DEFAULT_URL_LAN` / `DEFAULT_URL_WAN` 常量里，改默认值需要重新打包：
 
 ```kotlin
-const val URL_LAN = "http://192.168.31.15:8758"
-const val URL_WAN = "https://nas.lifang.asia:8758"
+const val DEFAULT_URL_LAN = "http://192.168.31.15:8758"
+const val DEFAULT_URL_WAN = "https://nas.lifang.asia:8758"
 ```
-
-改完提交推送即可，Actions 会自动打出新 APK。
 
 ## 常见问题
 
