@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    仅放行内网地址的明文 HTTP；HTTPS（nas.lifang.asia）使用系统信任的正规证书，
-    不做任何绕过校验的处理。
+    明文 HTTP 仅放行两个自有地址：
+    - 内网 IP 192.168.31.15（家里局域网）
+    - 外网域名 nas.lifang.asia（IPv6 直连，当前服务为明文 HTTP）
+    其余域名一律禁止明文、只允许 HTTPS。HTTPS 均使用系统信任的正规证书，不绕过校验。
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
@@ -12,5 +14,6 @@
 
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">192.168.31.15</domain>
+        <domain includeSubdomains="false">nas.lifang.asia</domain>
     </domain-config>
 </network-security-config>
