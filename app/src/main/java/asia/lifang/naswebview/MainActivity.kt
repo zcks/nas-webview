@@ -734,10 +734,12 @@ class MainActivity : AppCompatActivity() {
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // Web 优先的返回语义：抽屉 → 网页历史 → 双按退出
+                // （控制台/设置只从侧边栏进入，避免左缘返回手势误触）
                 when {
                     drawerLayout.isDrawerOpen(GravityCompat.START) -> closeDrawer()
+                    screenMode != "browse" && browseInitialized -> showScreen("browse")
                     screenMode == "browse" && webView.canGoBack() && !errorView.isVisible -> webView.goBack()
-                    screenMode != "home" -> showScreen("home")
                     else -> {
                         val now = System.currentTimeMillis()
                         if (now - lastBackPressedAt < EXIT_INTERVAL_MS) {
