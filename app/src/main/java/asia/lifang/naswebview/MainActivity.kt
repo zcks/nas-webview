@@ -246,7 +246,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupDrawer() {
         findViewById<TextView>(R.id.drawerVersion).text = "v${BuildConfig.VERSION_NAME}"
-        findViewById<View>(R.id.btnDrawer).setOnClickListener { openDrawer() }
+        findViewById<View>(R.id.edgeHandle).setOnClickListener { openDrawer() }
         findViewById<View>(R.id.itemHome).setOnClickListener {
             closeDrawer(); showScreen("home")
         }
@@ -577,7 +577,6 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setColorSchemeResources(R.color.accent)
         swipeRefresh.setOnRefreshListener { retry() }
 
-        findViewById<View>(R.id.btnFabRefresh).setOnClickListener { retry() }
         findViewById<Button>(R.id.btnRetry).setOnClickListener { retry() }
         findViewById<Button>(R.id.btnSwitchLine).setOnClickListener {
             enterLine(if (currentLine == LINE_LAN) LINE_WAN else LINE_LAN)
