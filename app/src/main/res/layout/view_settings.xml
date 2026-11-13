@@ -274,7 +274,7 @@
                 android:id="@+id/aboutVersion"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="NAS WebView v1.1.0"
+                android:text="NAS WebView v1.2.0"
                 android:textColor="@color/text_primary"
                 android:textSize="16sp" />
 
