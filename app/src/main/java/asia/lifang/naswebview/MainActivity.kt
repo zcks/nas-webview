@@ -62,6 +62,8 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_KEEP_AWAKE = "keep_awake"
         private const val KEY_LAST_LINE = "last_line"
         private const val KEY_STATE_URL = "state_url"
+        private const val KEY_STATE_LINE = "state_line"
+        private const val KEY_AUTO_PROBE = "auto_probe"
 
         private const val LINE_LAN = "lan"
         private const val LINE_WAN = "wan"
@@ -121,6 +123,7 @@ class MainActivity : AppCompatActivity() {
 
     private var currentLine = LINE_LAN
     private var currentUrl = DEFAULT_URL_LAN
+    private var browseInitialized = false
     private var lastBackPressedAt = 0L
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -184,7 +187,9 @@ class MainActivity : AppCompatActivity() {
 
         if (savedInstanceState != null) {
             currentUrl = savedInstanceState.getString(KEY_STATE_URL) ?: currentUrl
+            currentLine = savedInstanceState.getString(KEY_STATE_LINE) ?: currentLine
             webView.restoreState(savedInstanceState)
+            updateCapsule()
         }
         showScreen("home")
     }
@@ -228,7 +233,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupTabs() {
         tabHome.setOnClickListener { showScreen("home") }
-        tabBrowse.setOnClickListener { showScreen("browse") }
+        tabBrowse.setOnClickListener {
+            // 首次进浏览页：按「默认启动线路」设置选择线路
+            if (browseInitialized) {
+                showScreen("browse")
+            } else {
+                when (prefs.getString(KEY_START_MODE, "auto")) {
+                    "lan" -> enterLine(LINE_LAN)
+                    "wan" -> enterLine(LINE_WAN)
+                    else -> autoSelectAndEnter()
+                }
+            }
+        }
         tabSettings.setOnClickListener { showScreen("settings") }
     }
 
@@ -277,7 +293,7 @@ class MainActivity : AppCompatActivity() {
     private fun refreshHomeStatus(force: Boolean = false) {
         addrLan.text = urlLan
         addrWan.text = urlWan
-        if (!force && !prefs.getBoolean("auto_probe", true)) {
+        if (!force && !prefs.getBoolean(KEY_AUTO_PROBE, true)) {
             bannerTitle.text = "自动检测已关闭"
             bannerSub.text = "点击「重新检测」手动检测线路"
             return
@@ -515,6 +531,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadUrl(url: String) {
         currentUrl = url
+        browseInitialized = true
         errorView.isVisible = false
         swipeRefresh.isVisible = true
         swipeRefresh.isRefreshing = true
@@ -600,7 +617,7 @@ class MainActivity : AppCompatActivity() {
         segWan.setOnClickListener { saveStartMode("wan") }
 
         switchProbe.setOnCheckedChangeListener { _, checked ->
-            prefs.edit().putBoolean("auto_probe", checked).apply()
+            prefs.edit().putBoolean(KEY_AUTO_PROBE, checked).apply()
         }
         switchAwake.setOnCheckedChangeListener { _, checked ->
             prefs.edit().putBoolean(KEY_KEEP_AWAKE, checked).apply()
@@ -617,7 +634,7 @@ class MainActivity : AppCompatActivity() {
             "wan" -> saveStartMode("wan", persist = false)
             else -> saveStartMode("auto", persist = false)
         }
-        switchProbe.isChecked = prefs.getBoolean("auto_probe", true)
+        switchProbe.isChecked = prefs.getBoolean(KEY_AUTO_PROBE, true)
         switchAwake.isChecked = prefs.getBoolean(KEY_KEEP_AWAKE, true)
         etLan.setText(urlLan)
         etWan.setText(urlWan)
@@ -718,6 +735,7 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_STATE_URL, currentUrl)
+        outState.putString(KEY_STATE_LINE, currentLine)
         webView.saveState(outState)
     }
 
