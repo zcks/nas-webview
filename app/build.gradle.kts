@@ -30,8 +30,8 @@ android {
         applicationId = "asia.lifang.naswebview"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.3.1"
+        versionCode = 6
+        versionName = "1.4.0"
     }
 
     signingConfigs {
@@ -79,5 +79,4 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.2")
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
-    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 }
